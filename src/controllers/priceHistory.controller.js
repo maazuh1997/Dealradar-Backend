@@ -8,6 +8,9 @@ import {
     calculatePriceStats,
     calculatePriceIntelligence
 } from "../services/pricing/dealScore.service.js";
+import {
+    calculateForecast
+} from "../services/pricing/priceForecast.service.js";
 
 const findProductByIdentifier = async (
     identifier
@@ -209,6 +212,12 @@ const getProductPriceStats = asyncHandler(async (req, res) => {
             merchantCount:
                 offers.length
         });
+    const forecast =
+        calculateForecast({
+            currentPrice:
+                currentLowestPrice,
+            history
+        });
 
     let dealScore = {
         score: 0,
@@ -251,7 +260,8 @@ const getProductPriceStats = asyncHandler(async (req, res) => {
                 bestOffer ||
                 null,
             dealScore,
-            intelligence
+            intelligence,
+            forecast
         }
     });
 });
