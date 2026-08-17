@@ -57,87 +57,166 @@ const getValidHistory = (
         );
 };
 
-const calculateWeightedAverage = (
-    prices
+const calculateAverage = (
+    values
 ) => {
-    if (!prices.length) {
+    if (!values.length) {
         return 0;
     }
 
-    let weightedTotal = 0;
-    let weightTotal = 0;
+    return (
+        values.reduce(
+            (
+                sum,
+                value
+            ) =>
+                sum + value,
+            0
+        ) /
+        values.length
+    );
+};
 
-    prices.forEach(
+const calculateWeightedAverage = (
+    values
+) => {
+    if (!values.length) {
+        return 0;
+    }
+
+    let total = 0;
+    let weight = 0;
+
+    values.forEach(
         (
-            price,
+            value,
             index
         ) => {
-            const weight =
+            const currentWeight =
                 index + 1;
 
-            weightedTotal +=
-                price *
-                weight;
+            total +=
+                value *
+                currentWeight;
 
-            weightTotal +=
-                weight;
+            weight +=
+                currentWeight;
         }
     );
 
-    return weightTotal
-        ? weightedTotal /
-        weightTotal
+    return weight
+        ? total / weight
         : 0;
 };
 
-const calculateRegressionSlope = (
-    prices
+const calculateStandardDeviation = (
+    values
 ) => {
     if (
-        prices.length < 2
+        values.length < 2
     ) {
         return 0;
     }
 
-    const n =
-        prices.length;
+    const average =
+        calculateAverage(
+            values
+        );
 
-    const xMean =
-        (n - 1) / 2;
-
-    const yMean =
-        prices.reduce(
+    const variance =
+        values.reduce(
             (
                 sum,
-                price
+                value
             ) =>
-                sum + price,
+                sum +
+                Math.pow(
+                    value -
+                    average,
+                    2
+                ),
             0
-        ) / n;
+        ) /
+        values.length;
+
+    return Math.sqrt(
+        variance
+    );
+};
+
+const calculateTimeWeightedSlope = (
+    history
+) => {
+    if (
+        history.length < 2
+    ) {
+        return 0;
+    }
+
+    const firstDate =
+        history[0]
+            .recordedAt
+            .getTime();
+
+    const points =
+        history.map(
+            (item) => ({
+                x:
+                    (
+                        item.recordedAt.getTime() -
+                        firstDate
+                    ) /
+                    (
+                        1000 *
+                        60 *
+                        60 *
+                        24
+                    ),
+                y:
+                    item.price
+            })
+        );
+
+    const xMean =
+        calculateAverage(
+            points.map(
+                (point) =>
+                    point.x
+            )
+        );
+
+    const yMean =
+        calculateAverage(
+            points.map(
+                (point) =>
+                    point.y
+            )
+        );
 
     let numerator = 0;
     let denominator = 0;
 
-    prices.forEach(
-        (
-            price,
-            index
-        ) => {
+    points.forEach(
+        (point) => {
             const x =
-                index -
+                point.x -
                 xMean;
 
             numerator +=
                 x *
-                (price -
-                    yMean);
+                (
+                    point.y -
+                    yMean
+                );
 
             denominator +=
                 x * x;
         }
     );
 
-    if (!denominator) {
+    if (
+        denominator === 0
+    ) {
         return 0;
     }
 
@@ -147,64 +226,66 @@ const calculateRegressionSlope = (
     );
 };
 
-const calculateStandardDeviation = (
-    prices
+const calculateRecentHistory = (
+    history
 ) => {
     if (
-        prices.length < 2
+        history.length <= 14
     ) {
-        return 0;
+        return history;
     }
 
-    const average =
-        prices.reduce(
-            (
-                sum,
-                price
-            ) =>
-                sum + price,
-            0
-        ) / prices.length;
-
-    const variance =
-        prices.reduce(
-            (
-                sum,
-                price
-            ) =>
-                sum +
-                Math.pow(
-                    price -
-                    average,
-                    2
-                ),
-            0
-        ) /
-        prices.length;
-
-    return Math.sqrt(
-        variance
+    return history.slice(
+        -14
     );
 };
 
-const classifyDirection = (
+const classifyOutlook = (
     percentage
 ) => {
     if (
         percentage <=
         -3
     ) {
-        return "falling";
+        return "likely_to_drop";
     }
 
     if (
         percentage >=
         3
     ) {
-        return "rising";
+        return "likely_to_rise";
     }
 
     return "stable";
+};
+
+const calculateConfidence = ({
+    historyCount,
+    historyDays,
+    volatility
+}) => {
+    if (
+        historyCount < 5
+    ) {
+        return "low";
+    }
+
+    if (
+        historyDays < 7
+    ) {
+        return "low";
+    }
+
+    if (
+        historyCount >= 15 &&
+        historyDays >= 30 &&
+        volatility < 20
+    ) {
+        return "high";
+    }
+
+    return "medium";
 };
 
 const calculateForecast = ({
@@ -240,24 +321,46 @@ const calculateForecast = ({
             confidence:
                 "low",
             reason:
-                "At least 5 historical price points are required.",
+                "DealRadar needs at least 5 historical price points.",
             historyCount:
                 validHistory.length
         };
     }
 
-    const prices =
-        validHistory.map(
-            (item) =>
-                item.price
+    const firstDate =
+        validHistory[0]
+            .recordedAt;
+
+    const lastDate =
+        validHistory[
+            validHistory.length -
+            1
+        ].recordedAt;
+
+    const historyDays =
+        Math.max(
+            (
+                lastDate -
+                firstDate
+            ) /
+            (
+                1000 *
+                60 *
+                60 *
+                24
+            ),
+            0
+        );
+
+    const recentHistory =
+        calculateRecentHistory(
+            validHistory
         );
 
     const recentPrices =
-        prices.slice(
-            -Math.min(
-                prices.length,
-                14
-            )
+        recentHistory.map(
+            (item) =>
+                item.price
         );
 
     const weightedAverage =
@@ -265,49 +368,9 @@ const calculateForecast = ({
             recentPrices
         );
 
-    const slope =
-        calculateRegressionSlope(
-            recentPrices
-        );
-
     const standardDeviation =
         calculateStandardDeviation(
             recentPrices
-        );
-
-    const recentFirst =
-        recentPrices[0];
-
-    const recentLast =
-        recentPrices[
-        recentPrices.length -
-        1
-        ];
-
-    const recentChange =
-        recentFirst
-            ? (
-                (
-                    recentLast -
-                    recentFirst
-                ) /
-                recentFirst
-            ) *
-            100
-            : 0;
-
-    const normalizedSlope =
-        recentFirst
-            ? (
-                slope /
-                recentFirst
-            ) *
-            100
-            : 0;
-
-    const direction =
-        classifyDirection(
-            recentChange
         );
 
     const volatility =
@@ -319,24 +382,49 @@ const calculateForecast = ({
             100
             : 0;
 
-    const sevenDayMovement =
-        slope * 7;
+    const slopePerDay =
+        calculateTimeWeightedSlope(
+            recentHistory
+        );
 
-    const thirtyDayMovement =
-        slope * 30;
+    const recentStart =
+        recentHistory[0]
+            ?.price ||
+        currentPrice;
+
+    const recentEnd =
+        recentHistory[
+            recentHistory.length -
+            1
+        ]?.price ||
+        currentPrice;
+
+    const recentChange =
+        recentStart
+            ? (
+                (
+                    recentEnd -
+                    recentStart
+                ) /
+                recentStart
+            ) *
+            100
+            : 0;
 
     const forecast7Day =
         Math.max(
             0,
             currentPrice +
-            sevenDayMovement
+            slopePerDay *
+            7
         );
 
     const forecast30Day =
         Math.max(
             0,
             currentPrice +
-            thirtyDayMovement
+            slopePerDay *
+            30
         );
 
     const uncertainty7Day =
@@ -377,84 +465,50 @@ const calculateForecast = ({
         forecast30Day +
         uncertainty30Day;
 
-    let confidence =
-        "low";
-
-    if (
-        validHistory.length >=
-        10 &&
-        volatility < 20
-    ) {
-        confidence =
-            "medium";
-    }
-
-    if (
-        validHistory.length >=
-        20 &&
-        volatility < 15
-    ) {
-        confidence =
-            "high";
-    }
-
-    let outlook =
-        "stable";
-
-    if (
-        direction ===
-        "falling" &&
-        normalizedSlope <
-        -0.25
-    ) {
-        outlook =
-            "likely_to_drop";
-    } else if (
-        direction ===
-        "rising" &&
-        normalizedSlope >
-        0.25
-    ) {
-        outlook =
-            "likely_to_rise";
-    }
-
     const expectedChange7Day =
-        currentPrice
-            ? round(
-                (
-                    (
-                        forecast7Day -
-                        currentPrice
-                    ) /
-                    currentPrice
-                ) *
-                100
-            )
-            : 0;
+        (
+            (
+                forecast7Day -
+                currentPrice
+            ) /
+            currentPrice
+        ) *
+        100;
 
     const expectedChange30Day =
-        currentPrice
-            ? round(
-                (
-                    (
-                        forecast30Day -
-                        currentPrice
-                    ) /
-                    currentPrice
-                ) *
-                100
-            )
-            : 0;
+        (
+            (
+                forecast30Day -
+                currentPrice
+            ) /
+            currentPrice
+        ) *
+        100;
+
+    const outlook =
+        classifyOutlook(
+            expectedChange7Day
+        );
+
+    const confidence =
+        calculateConfidence({
+            historyCount:
+                validHistory.length,
+            historyDays,
+            volatility
+        });
 
     return {
         status:
             "available",
         outlook,
-        direction,
         confidence,
         historyCount:
             validHistory.length,
+        historyDays:
+            round(
+                historyDays
+            ),
         currentPrice:
             round(
                 currentPrice
@@ -464,9 +518,9 @@ const calculateForecast = ({
                 round(
                     recentChange
                 ),
-            slope:
+            slopePerDay:
                 round(
-                    normalizedSlope,
+                    slopePerDay,
                     4
                 )
         },
@@ -493,7 +547,9 @@ const calculateForecast = ({
                         sevenDayHigh
                     ),
                 expectedChange:
-                    expectedChange7Day
+                    round(
+                        expectedChange7Day
+                    )
             },
             thirtyDay: {
                 expected:
@@ -509,7 +565,9 @@ const calculateForecast = ({
                         thirtyDayHigh
                     ),
                 expectedChange:
-                    expectedChange30Day
+                    round(
+                        expectedChange30Day
+                    )
             }
         }
     };
