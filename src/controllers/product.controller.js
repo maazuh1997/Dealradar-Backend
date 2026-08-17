@@ -1,6 +1,12 @@
+import mongoose from "mongoose";
 import Product from "../models/Product.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import createSlug from "../utils/createSlug.js";
+import pricesApiProvider from "../services/providers/pricesApi.provider.js";
+import PriceAlert from "../models/PriceAlert.js";
+import Watchlist from "../models/Watchlist.js";
+import Offer from "../models/Offer.js";
+import PriceHistory from "../models/PriceHistory.js";
 
 const createProduct = asyncHandler(async (req, res) => {
     const {
@@ -187,9 +193,28 @@ const searchProducts = asyncHandler(async (req, res) => {
 });
 
 const getProductBySlug = asyncHandler(async (req, res) => {
-    const product = await Product.findOne({
-        slug: req.params.slug
-    });
+    const identifier = req.params.slug;
+
+    let product = null;
+
+    if (mongoose.Types.ObjectId.isValid(identifier)) {
+        product = await Product.findById(
+            identifier
+        );
+    }
+
+    if (!product) {
+        product = await Product.findOne({
+            slug: identifier
+        });
+    }
+
+    if (!product) {
+        product = await Product.findOne({
+            "metadata.externalId": identifier,
+            "metadata.provider": "pricesapi"
+        });
+    }
 
     if (!product) {
         return res.status(404).json({
@@ -198,10 +223,145 @@ const getProductBySlug = asyncHandler(async (req, res) => {
         });
     }
 
+    let provider = null;
+
+    const externalId =
+        product.metadata?.externalId;
+
+    const providerName =
+        product.metadata?.provider;
+
+    if (
+        externalId &&
+        providerName === "pricesapi"
+    ) {
+        const storedOffers =
+            await Offer.find({
+                product:
+                    product._id
+            })
+                .sort({
+                    price: 1
+                })
+                .lean();
+
+        if (
+            storedOffers.length
+        ) {
+            const offers =
+                storedOffers.map(
+                    (offer) => ({
+                        externalId:
+                            offer._id.toString(),
+                        title:
+                            offer.title ||
+                            product.title,
+                        merchant:
+                            offer.merchant,
+                        merchantUrl:
+                            null,
+                        url:
+                            offer.url,
+                        affiliateUrl:
+                            offer.affiliateUrl ||
+                            offer.url,
+                        price:
+                            Number(
+                                offer.price
+                            ),
+                        totalPrice:
+                            Number(
+                                offer.price
+                            ) +
+                            (
+                                Number(
+                                    offer.shippingCost
+                                ) || 0
+                            ),
+                        currency:
+                            offer.currency ||
+                            "USD",
+                        availability:
+                            offer.availability ||
+                            "unknown",
+                        shippingCost:
+                            Number(
+                                offer.shippingCost
+                            ) || 0,
+                        condition:
+                            null,
+                        image:
+                            product.images?.[0] ||
+                            null,
+                        brand:
+                            product.brand ||
+                            null,
+                        category:
+                            product.category ||
+                            null,
+                        provider:
+                            offer.provider,
+                        productExternalId:
+                            externalId
+                    })
+                );
+
+            const bestOffer =
+                offers[0] || null;
+
+            provider = {
+                provider:
+                    providerName,
+                externalId,
+                product: {
+                    externalId,
+                    title:
+                        product.title,
+                    image:
+                        product.images?.[0] ||
+                        null,
+                    merchant:
+                        bestOffer?.merchant ||
+                        "Unknown",
+                    url:
+                        bestOffer?.url ||
+                        "",
+                    affiliateUrl:
+                        bestOffer?.affiliateUrl ||
+                        "",
+                    price:
+                        bestOffer?.price ||
+                        0,
+                    currency:
+                        bestOffer?.currency ||
+                        "USD",
+                    rating:
+                        product.rating ||
+                        0,
+                    reviewCount:
+                        product.reviewCount ||
+                        0,
+                    offers,
+                    bestOffer
+                },
+                offers
+            };
+        } else {
+            provider =
+                await pricesApiProvider.getProduct({
+                    externalId,
+                    query:
+                        product.metadata?.query ||
+                        product.title
+                });
+        }
+    }
+
     res.status(200).json({
         success: true,
         data: {
-            product
+            product,
+            provider
         }
     });
 });
@@ -281,20 +441,48 @@ const updateProduct = asyncHandler(async (req, res) => {
 });
 
 const deleteProduct = asyncHandler(async (req, res) => {
-    const product = await Product.findById(req.params.id);
+    const product =
+        await Product.findById(
+            req.params.id
+        );
 
     if (!product) {
         return res.status(404).json({
             success: false,
-            message: "Product not found"
+            message:
+                "Product not found"
         });
     }
+
+    await Promise.all([
+        PriceHistory.deleteMany({
+            product:
+                product._id
+        }),
+        Offer.deleteMany({
+            product:
+                product._id
+        }),
+        Watchlist.deleteMany({
+            product:
+                product._id
+        }),
+        PriceAlert.deleteMany({
+            product:
+                product._id
+        }),
+        Notification.deleteMany({
+            product:
+                product._id
+        })
+    ]);
 
     await product.deleteOne();
 
     res.status(200).json({
         success: true,
-        message: "Product deleted successfully"
+        message:
+            "Product deleted successfully"
     });
 });
 

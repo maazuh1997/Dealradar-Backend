@@ -22,6 +22,22 @@ const findOrCreateProduct = async (data) => {
     }
 
     if (product) {
+        if (
+            !product.metadata?.query &&
+            data.title
+        ) {
+            product.metadata = {
+                ...(product.metadata?.toObject
+                    ? product.metadata.toObject()
+                    : product.metadata),
+                query:
+                    data.query ||
+                    data.title
+            };
+
+            await product.save();
+        }
+
         return product;
     }
 
@@ -43,7 +59,10 @@ const findOrCreateProduct = async (data) => {
         images: data.image ? [data.image] : [],
         metadata: {
             externalId: data.externalId,
-            provider: data.provider
+            provider: data.provider,
+            query:
+                data.query ||
+                data.title
         }
     });
 

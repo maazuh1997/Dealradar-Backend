@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import PriceHistory from "../models/PriceHistory.js";
 import Offer from "../models/Offer.js";
 import Product from "../models/Product.js";
@@ -7,10 +8,46 @@ import {
     calculatePriceStats
 } from "../services/pricing/dealScore.service.js";
 
+const findProductByIdentifier = async (
+    identifier
+) => {
+    let product = null;
+
+    if (
+        mongoose.Types.ObjectId.isValid(
+            identifier
+        )
+    ) {
+        product = await Product.findById(
+            identifier
+        );
+    }
+
+    if (!product) {
+        product = await Product.findOne({
+            slug: identifier
+        });
+    }
+
+    if (!product) {
+        product = await Product.findOne({
+            "metadata.externalId":
+                identifier,
+            "metadata.provider":
+                "pricesapi"
+        });
+    }
+
+    return product;
+};
+
 const getProductPriceHistory = asyncHandler(async (req, res) => {
     const { productId } = req.params;
 
-    const product = await Product.findById(productId);
+    const product =
+        await findProductByIdentifier(
+            productId
+        );
 
     if (!product) {
         return res.status(404).json({
@@ -32,11 +69,13 @@ const getProductPriceHistory = asyncHandler(async (req, res) => {
     const startDate = new Date();
 
     startDate.setDate(
-        startDate.getDate() - daysNumber
+        startDate.getDate() -
+        daysNumber
     );
 
     const filter = {
-        product: productId,
+        product:
+            product._id,
         recordedAt: {
             $gte: startDate
         }
@@ -46,13 +85,19 @@ const getProductPriceHistory = asyncHandler(async (req, res) => {
         filter.merchant = merchant;
     }
 
-    const history = await PriceHistory.find(filter)
-        .sort({
-            recordedAt: 1
-        })
-        .lean();
+    const history =
+        await PriceHistory.find(
+            filter
+        )
+            .sort({
+                recordedAt: 1
+            })
+            .lean();
 
-    const stats = calculatePriceStats(history);
+    const stats =
+        calculatePriceStats(
+            history
+        );
 
     res.status(200).json({
         success: true,
@@ -71,7 +116,10 @@ const getProductPriceHistory = asyncHandler(async (req, res) => {
 const getProductPriceStats = asyncHandler(async (req, res) => {
     const { productId } = req.params;
 
-    const product = await Product.findById(productId);
+    const product =
+        await findProductByIdentifier(
+            productId
+        );
 
     if (!product) {
         return res.status(404).json({
@@ -80,49 +128,70 @@ const getProductPriceStats = asyncHandler(async (req, res) => {
         });
     }
 
-    const history = await PriceHistory.find({
-        product: productId
-    })
-        .sort({
-            recordedAt: 1
+    const history =
+        await PriceHistory.find({
+            product:
+                product._id
         })
-        .lean();
+            .sort({
+                recordedAt: 1
+            })
+            .lean();
 
-    const stats = calculatePriceStats(history);
+    const stats =
+        calculatePriceStats(
+            history
+        );
 
-    const offers = await Offer.find({
-        product: productId,
-        availability: {
-            $ne: "out_of_stock"
-        }
-    })
-        .sort({
-            price: 1
+    const offers =
+        await Offer.find({
+            product:
+                product._id,
+            availability: {
+                $ne: "out_of_stock"
+            }
         })
-        .lean();
+            .sort({
+                price: 1
+            })
+            .lean();
 
-    const currentPrices = offers.map(
-        (offer) => offer.price
-    );
+    const currentPrices =
+        offers.map(
+            (offer) =>
+                offer.price
+        );
 
-    const currentLowestPrice = currentPrices.length
-        ? Math.min(...currentPrices)
-        : 0;
+    const currentLowestPrice =
+        currentPrices.length
+            ? Math.min(
+                ...currentPrices
+            )
+            : 0;
 
-    const currentAveragePrice = currentPrices.length
-        ? Number(
-            (
-                currentPrices.reduce(
-                    (sum, price) => sum + price,
-                    0
-                ) / currentPrices.length
-            ).toFixed(2)
-        )
-        : 0;
+    const currentAveragePrice =
+        currentPrices.length
+            ? Number(
+                (
+                    currentPrices.reduce(
+                        (
+                            sum,
+                            price
+                        ) =>
+                            sum +
+                            price,
+                        0
+                    ) /
+                    currentPrices.length
+                ).toFixed(2)
+            )
+            : 0;
 
-    const lowestHistoricalPrice = stats.lowestPrice;
+    const lowestHistoricalPrice =
+        stats.lowestPrice;
 
-    const bestOffer = offers[0];
+    const bestOffer =
+        offers[0];
 
     let dealScore = {
         score: 0,
@@ -130,26 +199,40 @@ const getProductPriceStats = asyncHandler(async (req, res) => {
     };
 
     if (bestOffer) {
-        dealScore = calculateDealScore({
-            currentPrice: bestOffer.price,
-            originalPrice: bestOffer.originalPrice,
-            lowestPrice: lowestHistoricalPrice,
-            averagePrice: stats.averagePrice || currentAveragePrice,
-            merchantCount: offers.length,
-            historyCount: history.length
-        });
+        dealScore =
+            calculateDealScore({
+                currentPrice:
+                    bestOffer.price,
+                originalPrice:
+                    bestOffer.originalPrice,
+                lowestPrice:
+                    lowestHistoricalPrice,
+                averagePrice:
+                    stats.averagePrice ||
+                    currentAveragePrice,
+                merchantCount:
+                    offers.length,
+                historyCount:
+                    history.length
+            });
     }
 
     res.status(200).json({
         success: true,
         data: {
             current: {
-                lowestPrice: currentLowestPrice,
-                averagePrice: currentAveragePrice,
-                merchantCount: offers.length
+                lowestPrice:
+                    currentLowestPrice,
+                averagePrice:
+                    currentAveragePrice,
+                merchantCount:
+                    offers.length
             },
-            historical: stats,
-            bestOffer: bestOffer || null,
+            historical:
+                stats,
+            bestOffer:
+                bestOffer ||
+                null,
             dealScore
         }
     });

@@ -7,12 +7,14 @@ import {
     normalizeProviderResult
 } from "../services/providers/normalizeProviderResult.js";
 import createSlug from "../utils/createSlug.js";
+import processPriceAlert from "../services/pricing/priceAlert.service.js";
 
 const createTrackedProduct = asyncHandler(
     async (req, res) => {
         const {
             product,
-            offers = []
+            offers = [],
+            query
         } = req.body;
 
         if (!product?.title) {
@@ -22,6 +24,10 @@ const createTrackedProduct = asyncHandler(
                     "Product information is required"
             });
         }
+
+        const productQuery =
+            query?.trim() ||
+            product.title.trim();
 
         let existingProduct = null;
 
@@ -84,9 +90,35 @@ const createTrackedProduct = asyncHandler(
                         externalId:
                             product.externalId,
                         provider:
-                            product.provider
+                            product.provider,
+                        query:
+                            productQuery
                     }
                 });
+        } else {
+            const currentQuery =
+                existingProduct.metadata
+                    ?.query;
+
+            if (
+                !currentQuery ||
+                currentQuery !==
+                productQuery
+            ) {
+                existingProduct.metadata = {
+                    ...(existingProduct.metadata?.toObject
+                        ? existingProduct.metadata.toObject()
+                        : existingProduct.metadata),
+                    externalId:
+                        product.externalId,
+                    provider:
+                        product.provider,
+                    query:
+                        productQuery
+                };
+
+                await existingProduct.save();
+            }
         }
 
         const normalizedOffers =
@@ -219,6 +251,10 @@ const createTrackedProduct = asyncHandler(
                     recordedAt:
                         new Date()
                 });
+
+                await processPriceAlert(
+                    offer
+                );
             }
         }
 

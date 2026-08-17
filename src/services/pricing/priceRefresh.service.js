@@ -48,7 +48,10 @@ const refreshOffer = async (offer) => {
     }
 
     const result = await provider.getProduct({
-        externalId
+        externalId,
+        query:
+            product.metadata?.query ||
+            product.title
     });
 
     const providerOffers =

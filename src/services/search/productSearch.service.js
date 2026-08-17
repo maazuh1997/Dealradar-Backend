@@ -1,4 +1,3 @@
-import ProductSearchCache from "../../models/ProductSearchCache.js";
 import searchProviderWithCache from "../providers/cachedProviderSearch.service.js";
 import {
     calculateDealScore
@@ -30,22 +29,35 @@ const calculateOfferDiscount = (
 };
 
 const formatOffer = (offer) => {
-    const price = Number(offer.price);
+    const price = Number(
+        offer.price
+    );
+
     const shipping =
-        Number(offer.shippingCost) || 0;
+        Number(
+            offer.shippingCost
+        ) || 0;
 
     return {
-        merchant: offer.merchant,
+        merchant:
+            offer.merchant,
         price,
         totalPrice:
             price + shipping,
-        currency: offer.currency,
-        shippingCost: shipping,
+        currency:
+            offer.currency ||
+            "USD",
+        shippingCost:
+            shipping,
         availability:
-            offer.availability,
-        url: offer.url,
+            offer.availability ||
+            "unknown",
+        url:
+            offer.url,
         affiliateUrl:
-            offer.affiliateUrl,
+            offer.affiliateUrl ||
+            offer.url ||
+            null,
         discountPercentage:
             calculateOfferDiscount(
                 price,
@@ -57,50 +69,74 @@ const formatOffer = (offer) => {
 const buildProductResult = (
     product
 ) => {
-    const offers = Array.isArray(
-        product.offers
-    )
-        ? product.offers
-            .map(formatOffer)
-            .filter(
-                (offer) =>
-                    Number.isFinite(
-                        offer.price
-                    )
-            )
-            .sort(
-                (a, b) =>
-                    a.totalPrice -
-                    b.totalPrice
-            )
-        : [];
+    if (
+        !product?.externalId ||
+        !product?.title
+    ) {
+        return null;
+    }
 
-    const prices = offers
-        .map(
-            (offer) =>
-                offer.totalPrice
+    const offers =
+        Array.isArray(
+            product.offers
         )
-        .filter(
-            (price) => price > 0
-        );
+            ? product.offers
+                .map(formatOffer)
+                .filter(
+                    (offer) =>
+                        Number.isFinite(
+                            offer.price
+                        ) &&
+                        offer.price > 0 &&
+                        offer.merchant &&
+                        offer.url
+                )
+                .sort(
+                    (a, b) =>
+                        a.totalPrice -
+                        b.totalPrice
+                )
+            : [];
 
-    const lowestPrice = prices.length
-        ? Math.min(...prices)
-        : Number(product.price) || 0;
+    if (!offers.length) {
+        return null;
+    }
+
+    const prices =
+        offers
+            .map(
+                (offer) =>
+                    offer.totalPrice
+            )
+            .filter(
+                (price) =>
+                    Number.isFinite(
+                        price
+                    ) &&
+                    price > 0
+            );
+
+    if (!prices.length) {
+        return null;
+    }
+
+    const lowestPrice =
+        Math.min(...prices);
 
     const averagePrice =
-        prices.length
-            ? Number(
-                (
-                    prices.reduce(
-                        (sum, price) =>
-                            sum + price,
-                        0
-                    ) /
-                    prices.length
-                ).toFixed(2)
-            )
-            : lowestPrice;
+        Number(
+            (
+                prices.reduce(
+                    (
+                        sum,
+                        price
+                    ) =>
+                        sum + price,
+                    0
+                ) /
+                prices.length
+            ).toFixed(2)
+        );
 
     const bestOffer =
         offers[0] || null;
@@ -127,15 +163,26 @@ const buildProductResult = (
     return {
         externalId:
             product.externalId,
-        title: product.title,
-        image: product.image,
-        brand: product.brand,
-        category: product.category,
-        rating: product.rating || 0,
+        title:
+            product.title,
+        image:
+            product.image ||
+            null,
+        brand:
+            product.brand ||
+            null,
+        category:
+            product.category ||
+            null,
+        rating:
+            Number(
+                product.rating
+            ) || 0,
         reviewCount:
-            product.reviewCount ||
-            product.reviews ||
-            0,
+            Number(
+                product.reviewCount ||
+                product.reviews
+            ) || 0,
         currency:
             product.currency ||
             bestOffer?.currency ||
@@ -164,8 +211,10 @@ const searchProducts = async ({
 
     const result =
         await searchProviderWithCache({
-            providerName: "pricesapi",
-            query: normalizedQuery,
+            providerName:
+                "pricesapi",
+            query:
+                normalizedQuery,
             country:
                 normalizedCountry,
             page,
@@ -173,18 +222,31 @@ const searchProducts = async ({
         });
 
     const products =
-        (result.products || []).map(
-            buildProductResult
-        );
+        Array.isArray(
+            result.products
+        )
+            ? result.products
+                .map(
+                    buildProductResult
+                )
+                .filter(Boolean)
+            : [];
 
     return {
-        query: normalizedQuery,
+        query:
+            normalizedQuery,
         country:
             normalizedCountry,
         cached:
-            result.cached || false,
+            result.cached ||
+            false,
         products,
-        meta: result.meta || {}
+        meta:
+            result.meta || {},
+        degraded:
+            result.degraded ||
+            result.meta?.degraded ||
+            false
     };
 };
 

@@ -24,16 +24,22 @@ const searchProvider = async ({
         });
 
     return {
-        provider: providerName,
+        provider:
+            providerName,
         query,
         country,
         page,
         limit,
         products:
             normalizeProviderResults(
-                result?.products || []
+                result?.products ||
+                []
             ),
-        meta: result?.meta || {}
+        meta:
+            result?.meta || {},
+        degraded:
+            result?.degraded === true ||
+            result?.meta?.degraded === true
     };
 };
 

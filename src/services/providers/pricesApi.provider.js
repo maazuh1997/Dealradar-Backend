@@ -21,7 +21,7 @@ const request = async ({
             limit: String(
                 Math.min(
                     Math.max(
-                        Number(limit) || 5,
+                        Number(limit) || 3,
                         1
                     ),
                     5
@@ -30,8 +30,7 @@ const request = async ({
             offers_limit: String(
                 Math.min(
                     Math.max(
-                        Number(offersLimit) ||
-                        10,
+                        Number(offersLimit) || 3,
                         1
                     ),
                     20
@@ -49,14 +48,16 @@ const request = async ({
 
     try {
         const response = await fetch(
-            `${env.pricesApi.baseUrl}/products/search?${params}`,
+            `${env.pricesApi.baseUrl}/products/search?${params.toString()}`,
             {
                 method: "GET",
                 headers: {
                     Authorization:
                         `Bearer ${env.pricesApi.key}`,
                     Accept:
-                        "application/json"
+                        "application/json",
+                    "User-Agent":
+                        "DealRadar/1.0"
                 },
                 signal:
                     controller.signal
@@ -88,6 +89,26 @@ const request = async ({
         }
 
         return data;
+    } catch (error) {
+        if (
+            error?.name ===
+            "AbortError"
+        ) {
+            const timeoutError =
+                new Error(
+                    `PricesAPI request timed out after ${env.pricesApi.timeout}ms`
+                );
+
+            timeoutError.statusCode =
+                504;
+
+            timeoutError.code =
+                "PRICES_API_TIMEOUT";
+
+            throw timeoutError;
+        }
+
+        throw error;
     } finally {
         clearTimeout(timeout);
     }
@@ -105,6 +126,19 @@ const mapOffer = ({
         return null;
     }
 
+    const price =
+        Number(
+            offer.price
+        );
+
+    const shippingCost =
+        offer.shipping === null ||
+            offer.shipping === undefined
+            ? 0
+            : Number(
+                offer.shipping
+            );
+
     return {
         externalId:
             `${product.pid}-${offer.seller}`,
@@ -119,10 +153,10 @@ const mapOffer = ({
             offer.url,
         affiliateUrl:
             offer.url,
-        price:
-            Number(offer.price),
-        originalPrice:
-            undefined,
+        price,
+        totalPrice:
+            price +
+            shippingCost,
         currency:
             offer.currency ||
             product.currency ||
@@ -133,11 +167,7 @@ const mapOffer = ({
                 "new"
                 ? "in_stock"
                 : "unknown",
-        shippingCost:
-            offer.shipping === null ||
-                offer.shipping === undefined
-                ? 0
-                : Number(offer.shipping),
+        shippingCost,
         condition:
             offer.condition ||
             null,
@@ -163,14 +193,41 @@ const mapProduct = ({
             product.offers
         )
             ? product.offers
-                .map((offer) =>
-                    mapOffer({
-                        offer,
-                        product
-                    })
+                .map(
+                    (offer) =>
+                        mapOffer({
+                            offer,
+                            product
+                        })
                 )
                 .filter(Boolean)
             : [];
+
+    const bestOffer =
+        offers.length > 0
+            ? offers.reduce(
+                (
+                    best,
+                    offer
+                ) => {
+                    if (
+                        !best ||
+                        offer.totalPrice <
+                        best.totalPrice
+                    ) {
+                        return offer;
+                    }
+
+                    return best;
+                },
+                null
+            )
+            : null;
+
+    const productPrice =
+        Number(
+            product.price
+        );
 
     return {
         externalId:
@@ -182,28 +239,33 @@ const mapProduct = ({
             null,
         merchant:
             product.source ||
-            offers[0]?.merchant ||
+            bestOffer?.merchant ||
             "Unknown",
         url:
-            offers[0]?.url ||
+            bestOffer?.url ||
             "",
         affiliateUrl:
-            offers[0]?.affiliateUrl ||
+            bestOffer?.affiliateUrl ||
             "",
         price:
-            Number(product.price) ||
-            offers[0]?.price ||
-            0,
+            Number.isFinite(
+                productPrice
+            )
+                ? productPrice
+                : bestOffer?.price ||
+                0,
         currency:
             product.currency ||
-            offers[0]?.currency ||
+            bestOffer?.currency ||
             "USD",
         rating:
-            Number(product.rating) ||
-            0,
+            Number(
+                product.rating
+            ) || 0,
         reviewCount:
-            Number(product.reviews) ||
-            0,
+            Number(
+                product.reviews
+            ) || 0,
         condition:
             product.condition ||
             null,
@@ -211,9 +273,12 @@ const mapProduct = ({
             product.delivery ||
             null,
         offerCount:
-            Number(product.offerCount) ||
+            Number(
+                product.offerCount
+            ) ||
             offers.length,
-        offers
+        offers,
+        bestOffer
     };
 };
 
@@ -224,9 +289,12 @@ const pricesApiProvider = {
         query,
         country,
         page = 1,
-        limit = 5
+        limit = 3
     }) => {
-        if (Number(page) !== 1) {
+        if (
+            Number(page) !==
+            1
+        ) {
             return {
                 products: [],
                 provider:
@@ -246,39 +314,55 @@ const pricesApiProvider = {
                         .offersLimit
             });
 
+        const rawProducts =
+            result?.data
+                ?.products;
+
         const products =
             Array.isArray(
-                result?.data
-                    ?.products
+                rawProducts
             )
-                ? result.data.products
+                ? rawProducts
                     .map(
                         (product) =>
                             mapProduct({
                                 product
                             })
                     )
+                    .filter(Boolean)
                 : [];
 
         return {
             products,
             meta:
-                result?.meta ||
-                {},
+                result?.meta || {},
             country:
-                result?.data?.country ||
+                result?.data
+                    ?.country ||
                 country ||
                 env.pricesApi
-                    .country
+                    .country,
+            provider:
+                "pricesapi",
+            degraded:
+                result?.meta
+                    ?.degraded ===
+                true
         };
     },
 
     getProduct: async ({
-        externalId
+        externalId,
+        query
     }) => {
+        const searchQuery =
+            query?.trim() ||
+            externalId;
+
         const result =
             await request({
-                query: externalId,
+                query:
+                    searchQuery,
                 country:
                     env.pricesApi
                         .country,
@@ -287,13 +371,13 @@ const pricesApiProvider = {
                     env.pricesApi
                         .offersLimit
             });
-
         const products =
             Array.isArray(
                 result?.data
                     ?.products
             )
-                ? result.data.products
+                ? result.data
+                    .products
                 : [];
 
         const product =
@@ -301,15 +385,19 @@ const pricesApiProvider = {
                 (item) =>
                     String(item.pid) ===
                     String(externalId)
-            ) ||
-            products[0];
+            );
 
         if (!product) {
             return {
                 provider:
                     "pricesapi",
                 externalId,
-                offers: []
+                product: null,
+                offers: [],
+                error:
+                    "PricesAPI product ID was not found",
+                query:
+                    searchQuery
             };
         }
 
@@ -322,8 +410,11 @@ const pricesApiProvider = {
             provider:
                 "pricesapi",
             externalId,
+            product: mapped,
             offers:
-                mapped.offers || []
+                mapped.offers || [],
+            query:
+                searchQuery
         };
     }
 };
