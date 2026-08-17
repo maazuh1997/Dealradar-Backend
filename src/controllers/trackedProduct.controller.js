@@ -132,6 +132,15 @@ const createTrackedProduct = asyncHandler(
             const previousPrice =
                 offer.price;
 
+            offer.merchant =
+                offerData.merchant;
+
+            offer.merchantKey =
+                offerData.merchantKey;
+
+            offer.title =
+                offerData.title;
+
             offer.price =
                 offerData.price;
 
