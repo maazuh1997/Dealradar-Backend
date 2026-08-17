@@ -9,6 +9,7 @@ import {
 import createSlug from "../utils/createSlug.js";
 import processPriceAlert from "../services/pricing/priceAlert.service.js";
 import { buildProductIdentity } from "../services/products/productIdentity.service.js";
+import {getOrCreateCanonicalProduct} from "../services/products/canonicalProduct.service.js";
 
 const createTrackedProduct = asyncHandler(
     async (req, res) => {
