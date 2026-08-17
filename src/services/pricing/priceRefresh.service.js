@@ -9,157 +9,268 @@ import {
     normalizeProviderResult
 } from "../providers/normalizeProviderResult.js";
 
-const refreshOffer = async (offer) => {
-    if (!offer.provider || offer.provider === "manual") {
+const refreshOffer = async (
+    offer
+) => {
+    if (
+        !offer.provider ||
+        offer.provider === "manual"
+    ) {
         return {
-            status: "skipped",
-            reason: "Provider does not support automatic refresh"
+            status:
+                "skipped",
+            reason:
+                "Provider does not support automatic refresh"
         };
     }
 
-    const provider = getProvider(offer.provider);
+    const provider =
+        getProvider(
+            offer.provider
+        );
 
-    if (!provider.getProduct) {
+    if (
+        !provider.getProduct
+    ) {
         return {
-            status: "skipped",
-            reason: "Provider does not support product refresh"
+            status:
+                "skipped",
+            reason:
+                "Provider does not support product refresh"
         };
     }
 
-    const product = await Product.findById(
-        offer.product
-    ).lean();
+    const product =
+        await Product.findById(
+            offer.product
+        ).lean();
 
     if (!product) {
         return {
-            status: "skipped",
-            reason: "Product not found"
+            status:
+                "skipped",
+            reason:
+                "Product not found"
         };
     }
 
+    const providerIdentity =
+        Array.isArray(
+            product.providerIds
+        )
+            ? product.providerIds.find(
+                (item) =>
+                    item.provider ===
+                    offer.provider
+            )
+            : null;
+
     const externalId =
-        product.metadata?.externalId;
+        providerIdentity?.externalId ||
+        (
+            product.metadata?.provider ===
+                offer.provider
+                ? product.metadata?.externalId
+                : null
+        );
 
     if (!externalId) {
         return {
-            status: "skipped",
-            reason: "Provider external ID is missing"
+            status:
+                "skipped",
+            reason:
+                "Provider external ID is missing"
         };
     }
 
-    const result = await provider.getProduct({
-        externalId,
-        query:
-            product.metadata?.query ||
-            product.title
-    });
+    const result =
+        await provider.getProduct({
+            externalId,
+            query:
+                product.metadata?.query ||
+                product.title
+        });
 
     const providerOffers =
-        Array.isArray(result?.offers)
+        Array.isArray(
+            result?.offers
+        )
             ? result.offers
+                .map(
+                    (item) =>
+                        normalizeProviderResult({
+                            ...item,
+                            title:
+                                item.title ||
+                                product.title,
+                            image:
+                                item.image ||
+                                product.images?.[0] ||
+                                null,
+                            brand:
+                                item.brand ||
+                                product.brand ||
+                                null,
+                            category:
+                                item.category ||
+                                product.category ||
+                                null,
+                            provider:
+                                offer.provider,
+                            productExternalId:
+                                externalId
+                        })
+                )
+                .filter(Boolean)
             : [];
 
-    const matchingOffer = providerOffers.find(
-        (item) =>
-            item.merchant?.toLowerCase() ===
-            offer.merchant.toLowerCase()
-    );
+    const matchingOffer =
+        providerOffers.find(
+            (item) =>
+                item.merchantKey ===
+                offer.merchantKey
+        ) ||
+        providerOffers.find(
+            (item) =>
+                item.merchant?.toLowerCase() ===
+                offer.merchant?.toLowerCase()
+        );
 
     if (!matchingOffer) {
         return {
-            status: "skipped",
-            reason: "Matching provider offer not found"
+            status:
+                "skipped",
+            reason:
+                "Matching provider offer not found"
         };
     }
 
-    const normalized =
-        normalizeProviderResult({
-            ...matchingOffer,
-            provider: offer.provider
-        });
+    const previousPrice =
+        offer.price;
 
-    if (!normalized) {
-        return {
-            status: "skipped",
-            reason: "Invalid provider result"
-        };
-    }
+    offer.merchant =
+        matchingOffer.merchant;
 
-    const previousPrice = offer.price;
+    offer.merchantKey =
+        matchingOffer.merchantKey;
 
-    offer.title = normalized.title;
-    offer.url = normalized.url;
+    offer.title =
+        matchingOffer.title;
+
+    offer.url =
+        matchingOffer.url;
+
     offer.affiliateUrl =
-        normalized.affiliateUrl;
-    offer.price = normalized.price;
+        matchingOffer.affiliateUrl;
+
+    offer.price =
+        matchingOffer.price;
+
     offer.originalPrice =
-        normalized.originalPrice;
-    offer.currency = normalized.currency;
+        matchingOffer.originalPrice;
+
+    offer.currency =
+        matchingOffer.currency;
+
     offer.availability =
-        normalized.availability;
+        matchingOffer.availability;
+
     offer.shippingCost =
-        normalized.shippingCost;
-    offer.lastChecked = new Date();
+        matchingOffer.shippingCost;
+
+    offer.lastChecked =
+        new Date();
 
     await offer.save();
 
-    if (previousPrice !== offer.price) {
+    if (
+        previousPrice !==
+        offer.price
+    ) {
         await PriceHistory.create({
-            product: offer.product,
-            offer: offer._id,
-            merchant: offer.merchant,
-            price: offer.price,
-            currency: offer.currency,
-            recordedAt: new Date()
+            product:
+                offer.product,
+            offer:
+                offer._id,
+            merchant:
+                offer.merchant,
+            price:
+                offer.price,
+            currency:
+                offer.currency,
+            recordedAt:
+                new Date()
         });
 
-        await processPriceAlert(offer);
+        await processPriceAlert(
+            offer
+        );
     }
 
     return {
         status:
-            previousPrice === offer.price
+            previousPrice ===
+                offer.price
                 ? "unchanged"
                 : "updated",
         previousPrice,
-        currentPrice: offer.price,
-        offerId: offer._id
+        currentPrice:
+            offer.price,
+        offerId:
+            offer._id
     };
 };
 
-const refreshPrices = async () => {
-    const offers = await Offer.find({
-        provider: {
-            $ne: "manual"
-        }
-    });
-
-    const results = [];
-
-    for (const offer of offers) {
-        try {
-            const result = await refreshOffer(offer);
-
-            results.push({
-                offerId: offer._id,
-                merchant: offer.merchant,
-                ...result
+const refreshPrices =
+    async () => {
+        const offers =
+            await Offer.find({
+                provider: {
+                    $ne:
+                        "manual"
+                }
             });
-        } catch (error) {
-            results.push({
-                offerId: offer._id,
-                merchant: offer.merchant,
-                status: "failed",
-                reason: error.message
-            });
-        }
-    }
 
-    return {
-        total: offers.length,
-        results
+        const results = [];
+
+        for (
+            const offer of offers
+        ) {
+            try {
+                const result =
+                    await refreshOffer(
+                        offer
+                    );
+
+                results.push({
+                    offerId:
+                        offer._id,
+                    merchant:
+                        offer.merchant,
+                    ...result
+                });
+            } catch (
+            error
+            ) {
+                results.push({
+                    offerId:
+                        offer._id,
+                    merchant:
+                        offer.merchant,
+                    status:
+                        "failed",
+                    reason:
+                        error.message
+                });
+            }
+        }
+
+        return {
+            total:
+                offers.length,
+            results
+        };
     };
-};
 
 export {
     refreshOffer,

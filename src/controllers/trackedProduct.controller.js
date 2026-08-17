@@ -6,7 +6,6 @@ import {
     normalizeProviderResult
 } from "../services/providers/normalizeProviderResult.js";
 import processPriceAlert from "../services/pricing/priceAlert.service.js";
-import { buildProductIdentity } from "../services/products/productIdentity.service.js";
 import { getOrCreateCanonicalProduct } from "../services/products/canonicalProduct.service.js";
 
 const createTrackedProduct = asyncHandler(
@@ -28,22 +27,6 @@ const createTrackedProduct = asyncHandler(
         const productQuery =
             query?.trim() ||
             product.title.trim();
-
-        const productIdentity =
-            buildProductIdentity({
-                title:
-                    product.title,
-                brand:
-                    product.brand,
-                category:
-                    product.category,
-                identifiers:
-                    product.identifiers ||
-                    {},
-                specifications:
-                    product.specifications ||
-                    {}
-            });
 
         const canonicalResult =
             await getOrCreateCanonicalProduct({

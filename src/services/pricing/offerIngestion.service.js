@@ -1,128 +1,186 @@
-import Product from "../../models/Product.js";
 import Offer from "../../models/Offer.js";
 import PriceHistory from "../../models/PriceHistory.js";
 import processPriceAlert from "./priceAlert.service.js";
-import createSlug from "../../utils/createSlug.js";
+import {
+    getOrCreateCanonicalProduct
+} from "../products/canonicalProduct.service.js";
+import {
+    getMerchantIdentity
+} from "../merchants/merchantIdentity.service.js";
 
-const findOrCreateProduct = async (data) => {
-    let product = null;
-
-    if (data.externalId && data.provider) {
-        product = await Product.findOne({
-            "metadata.externalId": data.externalId,
-            "metadata.provider": data.provider
-        });
+const ingestOffer = async (
+    data
+) => {
+    if (
+        !data?.title ||
+        !data?.provider ||
+        !data?.merchant ||
+        !data?.url
+    ) {
+        throw new Error(
+            "Invalid provider offer data"
+        );
     }
 
-    if (!product) {
-        product = await Product.findOne({
-            title: data.title,
-            brand: data.brand || undefined
+    const merchantIdentity =
+        getMerchantIdentity({
+            merchant:
+                data.merchant,
+            merchantUrl:
+                data.merchantUrl
         });
-    }
 
-    if (product) {
-        if (
-            !product.metadata?.query &&
-            data.title
-        ) {
-            product.metadata = {
-                ...(product.metadata?.toObject
-                    ? product.metadata.toObject()
-                    : product.metadata),
+    const canonicalResult =
+        await getOrCreateCanonicalProduct({
+            product: {
+                externalId:
+                    data.productExternalId ||
+                    data.externalId ||
+                    null,
+                provider:
+                    data.provider,
+                title:
+                    data.title,
+                brand:
+                    data.brand ||
+                    null,
+                category:
+                    data.category ||
+                    null,
+                description:
+                    data.description ||
+                    null,
+                images:
+                    data.image
+                        ? [data.image]
+                        : [],
+                identifiers:
+                    data.identifiers ||
+                    {},
+                specifications:
+                    data.specifications ||
+                    {},
+                rating:
+                    data.rating ||
+                    0,
+                reviewCount:
+                    data.reviewCount ||
+                    0,
                 query:
                     data.query ||
                     data.title
-            };
+            }
+        });
 
-            await product.save();
-        }
+    const product =
+        canonicalResult.product;
 
-        return product;
-    }
+    let offer =
+        await Offer.findOne({
+            product:
+                product._id,
+            merchantKey:
+                merchantIdentity.key,
+            provider:
+                data.provider
+        });
 
-    const baseSlug = createSlug(data.title);
-
-    let slug = baseSlug;
-    let counter = 1;
-
-    while (await Product.exists({ slug })) {
-        slug = `${baseSlug}-${counter}`;
-        counter += 1;
-    }
-
-    product = await Product.create({
-        title: data.title,
-        slug,
-        brand: data.brand,
-        category: data.category,
-        images: data.image ? [data.image] : [],
-        metadata: {
-            externalId: data.externalId,
-            provider: data.provider,
-            query:
-                data.query ||
-                data.title
-        }
-    });
-
-    return product;
-};
-
-const ingestOffer = async (data) => {
-    const product = await findOrCreateProduct(data);
-
-    let offer = await Offer.findOne({
-        product: product._id,
-        merchant: data.merchant,
-        provider: data.provider
-    });
-
-    const previousPrice = offer?.price;
+    const previousPrice =
+        offer?.price;
 
     if (!offer) {
-        offer = await Offer.create({
-            product: product._id,
-            merchant: data.merchant,
-            title: data.title,
-            url: data.url,
-            affiliateUrl: data.affiliateUrl,
-            price: data.price,
-            originalPrice: data.originalPrice,
-            currency: data.currency,
-            availability: data.availability,
-            shippingCost: data.shippingCost,
-            provider: data.provider,
-            lastChecked: new Date()
-        });
+        offer =
+            await Offer.create({
+                product:
+                    product._id,
+                merchant:
+                    merchantIdentity.canonicalName,
+                merchantKey:
+                    merchantIdentity.key,
+                title:
+                    data.title,
+                url:
+                    data.url,
+                affiliateUrl:
+                    data.affiliateUrl ||
+                    data.url,
+                price:
+                    data.price,
+                originalPrice:
+                    data.originalPrice,
+                currency:
+                    data.currency,
+                availability:
+                    data.availability,
+                shippingCost:
+                    data.shippingCost,
+                provider:
+                    data.provider,
+                lastChecked:
+                    new Date()
+            });
     } else {
-        offer.title = data.title;
-        offer.url = data.url;
-        offer.affiliateUrl = data.affiliateUrl;
-        offer.price = data.price;
-        offer.originalPrice = data.originalPrice;
-        offer.currency = data.currency;
-        offer.availability = data.availability;
-        offer.shippingCost = data.shippingCost;
-        offer.lastChecked = new Date();
+        offer.merchant =
+            merchantIdentity.canonicalName;
+
+        offer.merchantKey =
+            merchantIdentity.key;
+
+        offer.title =
+            data.title;
+
+        offer.url =
+            data.url;
+
+        offer.affiliateUrl =
+            data.affiliateUrl ||
+            data.url;
+
+        offer.price =
+            data.price;
+
+        offer.originalPrice =
+            data.originalPrice;
+
+        offer.currency =
+            data.currency;
+
+        offer.availability =
+            data.availability;
+
+        offer.shippingCost =
+            data.shippingCost;
+
+        offer.lastChecked =
+            new Date();
 
         await offer.save();
     }
 
     if (
-        previousPrice === undefined ||
-        previousPrice !== offer.price
+        previousPrice ===
+        undefined ||
+        previousPrice !==
+        offer.price
     ) {
         await PriceHistory.create({
-            product: product._id,
-            offer: offer._id,
-            merchant: offer.merchant,
-            price: offer.price,
-            currency: offer.currency,
-            recordedAt: new Date()
+            product:
+                product._id,
+            offer:
+                offer._id,
+            merchant:
+                offer.merchant,
+            price:
+                offer.price,
+            currency:
+                offer.currency,
+            recordedAt:
+                new Date()
         });
 
-        await processPriceAlert(offer);
+        await processPriceAlert(
+            offer
+        );
     }
 
     return {
@@ -131,17 +189,27 @@ const ingestOffer = async (data) => {
     };
 };
 
-const ingestOffers = async (results) => {
-    const imported = [];
+const ingestOffers =
+    async (
+        results
+    ) => {
+        const imported = [];
 
-    for (const result of results) {
-        const importedOffer = await ingestOffer(result);
+        for (
+            const result of results
+        ) {
+            const importedOffer =
+                await ingestOffer(
+                    result
+                );
 
-        imported.push(importedOffer);
-    }
+            imported.push(
+                importedOffer
+            );
+        }
 
-    return imported;
-};
+        return imported;
+    };
 
 export {
     ingestOffer,
