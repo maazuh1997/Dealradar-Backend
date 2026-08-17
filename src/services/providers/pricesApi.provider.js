@@ -1,4 +1,7 @@
 import env from "../../config/env.js";
+import {
+    getMerchantIdentity
+} from "../merchants/merchantIdentity.service.js";
 
 const request = async ({
     query,
@@ -139,16 +142,30 @@ const mapOffer = ({
                 offer.shipping
             );
 
+    const merchantIdentity =
+        getMerchantIdentity({
+            merchant:
+                offer.seller,
+            merchantUrl:
+                offer.seller_url
+        });
+
     return {
         externalId:
             `${product.pid}-${offer.seller}`,
         title:
             product.title,
-        merchant:
-            offer.seller,
         merchantUrl:
             offer.seller_url ||
             null,
+        merchant:
+            merchantIdentity.canonicalName,
+
+        merchantKey:
+            merchantIdentity.key,
+
+        merchantName:
+            offer.seller,
         url:
             offer.url,
         affiliateUrl:

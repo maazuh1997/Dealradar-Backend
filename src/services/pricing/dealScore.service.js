@@ -465,138 +465,183 @@ const calculateRecommendation = ({
 
 const calculateDealScore = ({
     currentPrice,
-    originalPrice,
-    lowestPrice,
-    averagePrice,
-    merchantCount,
+    originalPrice = null,
+    lowestPrice = 0,
+    averagePrice = 0,
+    merchantCount = 0,
     historyCount = 0
 }) => {
+    const current =
+        Number(
+            currentPrice
+        ) || 0;
+
     if (
-        !currentPrice ||
-        currentPrice <= 0
+        current <= 0
     ) {
         return {
             score: 0,
             label: "Unknown",
-            confidence: "low"
+            confidence: "low",
+            reasons: []
         };
     }
 
     let score = 50;
 
+    const reasons = [];
+
     if (
-        averagePrice >
-        currentPrice
+        averagePrice > 0
     ) {
-        const savingsFromAverage =
+        const difference =
             (
                 (
                     averagePrice -
-                    currentPrice
+                    current
                 ) /
                 averagePrice
-            ) *
-            100;
+            ) * 100;
 
-        score += Math.min(
-            savingsFromAverage *
-            1.5,
-            25
-        );
-    } else if (
-        averagePrice >
-        0
-    ) {
-        const aboveAverage =
-            (
-                (
-                    currentPrice -
-                    averagePrice
-                ) /
-                averagePrice
-            ) *
-            100;
+        if (
+            difference >= 30
+        ) {
+            score += 30;
 
-        score -= Math.min(
-            aboveAverage *
-            1.5,
-            20
-        );
+            reasons.push(
+                "Far below historical average"
+            );
+        } else if (
+            difference >= 20
+        ) {
+            score += 24;
+
+            reasons.push(
+                "Well below historical average"
+            );
+        } else if (
+            difference >= 10
+        ) {
+            score += 16;
+
+            reasons.push(
+                "Below historical average"
+            );
+        } else if (
+            difference >= 5
+        ) {
+            score += 8;
+        } else if (
+            difference <= -20
+        ) {
+            score -= 25;
+
+            reasons.push(
+                "Significantly above historical average"
+            );
+        } else if (
+            difference <= -10
+        ) {
+            score -= 16;
+
+            reasons.push(
+                "Above historical average"
+            );
+        }
     }
 
     if (
         lowestPrice > 0
     ) {
         if (
-            currentPrice <=
+            current <=
             lowestPrice
         ) {
             score += 20;
+
+            reasons.push(
+                "At historical low"
+            );
         } else {
-            const distanceFromLowest =
+            const distance =
                 (
                     (
-                        currentPrice -
+                        current -
                         lowestPrice
                     ) /
                     lowestPrice
-                ) *
-                100;
+                ) * 100;
 
-            score -= Math.min(
-                distanceFromLowest,
-                15
-            );
+            if (
+                distance <= 5
+            ) {
+                score += 12;
+
+                reasons.push(
+                    "Very close to historical low"
+                );
+            } else if (
+                distance <= 10
+            ) {
+                score += 6;
+            }
         }
     }
 
     if (
         originalPrice &&
         originalPrice >
-        currentPrice
+        current
     ) {
         const discount =
             (
                 (
                     originalPrice -
-                    currentPrice
+                    current
                 ) /
                 originalPrice
-            ) *
-            100;
+            ) * 100;
 
-        score += Math.min(
-            discount *
-            0.5,
-            10
-        );
-    }
+        if (
+            discount >= 30
+        ) {
+            score += 10;
 
-    if (
-        merchantCount >= 3
-    ) {
-        score += 3;
+            reasons.push(
+                `${Math.round(
+                    discount
+                )}% below listed price`
+            );
+        } else if (
+            discount >= 15
+        ) {
+            score += 6;
+        }
     }
 
     if (
         merchantCount >= 5
     ) {
-        score += 2;
+        score += 5;
+    } else if (
+        merchantCount >= 3
+    ) {
+        score += 3;
     }
 
     score =
-        Math.round(
-            Math.max(
-                0,
-                Math.min(
-                    score,
-                    100
+        Math.max(
+            0,
+            Math.min(
+                100,
+                Math.round(
+                    score
                 )
             )
         );
 
     let label =
-        "Poor";
+        "Fair";
 
     if (
         score >= 85
@@ -613,20 +658,38 @@ const calculateDealScore = ({
     ) {
         label =
             "Fair";
+    } else if (
+        score >= 30
+    ) {
+        label =
+            "Poor";
+    } else {
+        label =
+            "Bad";
     }
 
-    const confidence =
-        calculateConfidence({
-            historyCount,
-            merchantCount,
-            hasHistoricalData:
-                historyCount > 0
-        });
+    let confidence =
+        "low";
+
+    if (
+        historyCount >= 30 &&
+        merchantCount >= 3
+    ) {
+        confidence =
+            "high";
+    } else if (
+        historyCount >= 10 ||
+        merchantCount >= 3
+    ) {
+        confidence =
+            "medium";
+    }
 
     return {
         score,
         label,
-        confidence
+        confidence,
+        reasons
     };
 };
 
@@ -858,6 +921,20 @@ const calculatePriceIntelligence = ({
 const calculatePriceStats = (
     history
 ) => {
+    if (
+        !Array.isArray(history) ||
+        !history.length
+    ) {
+        return {
+            lowestPrice: 0,
+            highestPrice: 0,
+            averagePrice: 0,
+            medianPrice: 0,
+            currentPrice: 0,
+            historyCount: 0
+        };
+    }
+
     const prices =
         history
             .map(
@@ -868,34 +945,254 @@ const calculatePriceStats = (
             )
             .filter(
                 (price) =>
+                    Number.isFinite(
+                        price
+                    ) &&
                     price > 0
+            )
+            .sort(
+                (a, b) =>
+                    a - b
             );
 
-    if (
-        !prices.length
-    ) {
+    if (!prices.length) {
         return {
             lowestPrice: 0,
             highestPrice: 0,
-            averagePrice: 0
+            averagePrice: 0,
+            medianPrice: 0,
+            currentPrice: 0,
+            historyCount: 0
+        };
+    }
+
+    const total =
+        prices.reduce(
+            (
+                sum,
+                price
+            ) =>
+                sum + price,
+            0
+        );
+
+    const middle =
+        Math.floor(
+            prices.length / 2
+        );
+
+    const medianPrice =
+        prices.length % 2 === 0
+            ? (
+                prices[
+                middle - 1
+                ] +
+                prices[
+                middle
+                ]
+            ) / 2
+            : prices[middle];
+
+    return {
+        lowestPrice:
+            prices[0],
+        highestPrice:
+            prices[
+            prices.length - 1
+            ],
+        averagePrice:
+            Number(
+                (
+                    total /
+                    prices.length
+                ).toFixed(2)
+            ),
+        medianPrice:
+            Number(
+                medianPrice.toFixed(
+                    2
+                )
+            ),
+        currentPrice:
+            prices[
+            prices.length - 1
+            ],
+        historyCount:
+            prices.length
+    };
+};
+
+const calculatePriceTrend = (
+    history
+) => {
+    if (
+        !Array.isArray(history) ||
+        history.length < 2
+    ) {
+        return {
+            direction: "unknown",
+            percentage: 0,
+            change: 0
+        };
+    }
+
+    const sorted =
+        [...history]
+            .sort(
+                (a, b) =>
+                    new Date(
+                        a.recordedAt
+                    ) -
+                    new Date(
+                        b.recordedAt
+                    )
+            );
+
+    const first =
+        Number(
+            sorted[0].price
+        );
+
+    const latest =
+        Number(
+            sorted[
+                sorted.length - 1
+            ].price
+        );
+
+    if (
+        !Number.isFinite(
+            first
+        ) ||
+        !Number.isFinite(
+            latest
+        ) ||
+        first <= 0
+    ) {
+        return {
+            direction: "unknown",
+            percentage: 0,
+            change: 0
+        };
+    }
+
+    const change =
+        latest - first;
+
+    const percentage =
+        Number(
+            (
+                (
+                    change /
+                    first
+                ) * 100
+            ).toFixed(2)
+        );
+
+    let direction =
+        "stable";
+
+    if (
+        percentage > 2
+    ) {
+        direction =
+            "up";
+    } else if (
+        percentage < -2
+    ) {
+        direction =
+            "down";
+    }
+
+    return {
+        direction,
+        percentage,
+        change:
+            Number(
+                change.toFixed(2)
+            )
+    };
+};
+
+const getBuyRecommendation = ({
+    dealScore,
+    trend,
+    currentPrice,
+    lowestPrice,
+    averagePrice
+}) => {
+    if (
+        !currentPrice
+    ) {
+        return {
+            action: "unknown",
+            reason:
+                "Current price is unavailable"
+        };
+    }
+
+    if (
+        dealScore >= 85
+    ) {
+        return {
+            action: "buy_now",
+            reason:
+                "Price is exceptionally attractive compared with historical prices"
+        };
+    }
+
+    if (
+        dealScore >= 70 &&
+        trend?.direction !==
+        "up"
+    ) {
+        return {
+            action: "buy_now",
+            reason:
+                "Price is below its normal range and the trend is favorable"
+        };
+    }
+
+    if (
+        lowestPrice > 0 &&
+        currentPrice <=
+        lowestPrice * 1.05
+    ) {
+        return {
+            action: "buy_now",
+            reason:
+                "Current price is within 5% of the historical low"
+        };
+    }
+
+    if (
+        averagePrice > 0 &&
+        currentPrice >
+        averagePrice * 1.1 &&
+        trend?.direction ===
+        "up"
+    ) {
+        return {
+            action: "wait",
+            reason:
+                "Price is above average and currently trending upward"
+        };
+    }
+
+    if (
+        dealScore < 50
+    ) {
+        return {
+            action: "wait",
+            reason:
+                "Current price is not particularly attractive"
         };
     }
 
     return {
-        lowestPrice:
-            Math.min(
-                ...prices
-            ),
-        highestPrice:
-            Math.max(
-                ...prices
-            ),
-        averagePrice:
-            Number(
-                calculateAverage(
-                    prices
-                ).toFixed(2)
-            )
+        action: "watch",
+        reason:
+            "Price is reasonable but there is not enough evidence for a strong buy signal"
     };
 };
 
@@ -903,5 +1200,7 @@ export {
     calculateDealScore,
     calculatePriceStats,
     calculateAverage,
-    calculatePriceIntelligence
+    calculatePriceIntelligence,
+    calculatePriceTrend,
+    getBuyRecommendation
 };

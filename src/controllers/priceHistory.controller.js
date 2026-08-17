@@ -6,7 +6,8 @@ import asyncHandler from "../utils/asyncHandler.js";
 import {
     calculateDealScore,
     calculatePriceStats,
-    calculatePriceIntelligence
+    calculatePriceIntelligence,
+    calculatePriceTrend
 } from "../services/pricing/dealScore.service.js";
 import {
     calculateForecast
@@ -147,6 +148,11 @@ const getProductPriceStats = asyncHandler(async (req, res) => {
             history
         );
 
+    const trend =
+        calculatePriceTrend(
+            history
+        );
+
     const offers =
         await Offer.find({
             product:
@@ -242,6 +248,19 @@ const getProductPriceStats = asyncHandler(async (req, res) => {
                     history.length
             });
     }
+    const recommendation =
+        getBuyRecommendation({
+            dealScore:
+                dealScore.score,
+            trend,
+            currentPrice:
+                currentLowestPrice,
+            lowestPrice:
+                lowestHistoricalPrice,
+            averagePrice:
+                stats.averagePrice ||
+                currentAveragePrice
+        });
 
     res.status(200).json({
         success: true,
@@ -261,7 +280,9 @@ const getProductPriceStats = asyncHandler(async (req, res) => {
                 null,
             dealScore,
             intelligence,
-            forecast
+            forecast,
+            trend,
+            recommendation,
         }
     });
 });

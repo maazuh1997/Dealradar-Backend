@@ -8,6 +8,10 @@ const offerSchema = new mongoose.Schema(
       required: true,
       index: true
     },
+    merchantKey: {
+      type: String,
+      index: true
+    },
     merchant: {
       type: String,
       required: true,
@@ -67,7 +71,8 @@ const offerSchema = new mongoose.Schema(
 
 offerSchema.index({
   product: 1,
-  merchant: 1
+  merchantKey: 1,
+  provider: 1
 });
 
 const Offer = mongoose.model("Offer", offerSchema);
