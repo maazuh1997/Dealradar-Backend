@@ -1,12 +1,10 @@
 import asyncHandler from "../utils/asyncHandler.js";
-import Product from "../models/Product.js";
 import Offer from "../models/Offer.js";
 import PriceHistory from "../models/PriceHistory.js";
 import Watchlist from "../models/Watchlist.js";
 import {
     normalizeProviderResult
 } from "../services/providers/normalizeProviderResult.js";
-import createSlug from "../utils/createSlug.js";
 import processPriceAlert from "../services/pricing/priceAlert.service.js";
 import { buildProductIdentity } from "../services/products/productIdentity.service.js";
 import { getOrCreateCanonicalProduct } from "../services/products/canonicalProduct.service.js";
@@ -47,118 +45,21 @@ const createTrackedProduct = asyncHandler(
                     {}
             });
 
-        let existingProduct = null;
-
-        if (
-            product.externalId &&
-            product.provider
-        ) {
-            existingProduct =
-                await Product.findOne({
-                    "metadata.externalId":
-                        product.externalId,
-                    "metadata.provider":
-                        product.provider
-                });
-        }
-
-        if (
-            !existingProduct &&
-            productIdentity.fingerprint
-        ) {
-            existingProduct =
-                await Product.findOne({
-                    "identity.fingerprint":
-                        productIdentity.fingerprint
-                });
-        }
-
-        if (!existingProduct) {
-            const baseSlug =
-                createSlug(
-                    product.title
-                );
-
-            let slug = baseSlug;
-            let counter = 1;
-
-            while (
-                await Product.exists({
-                    slug
-                })
-            ) {
-                slug =
-                    `${baseSlug}-${counter}`;
-                counter += 1;
-            }
-
-            existingProduct =
-                await Product.create({
-                    title:
-                        product.title,
-                    slug,
-                    brand:
-                        product.brand,
-                    category:
-                        product.category,
-                    description:
-                        product.description,
+        const canonicalResult =
+            await getOrCreateCanonicalProduct({
+                product: {
+                    ...product,
+                    query:
+                        productQuery,
                     images:
                         product.image
                             ? [product.image]
-                            : [],
-                    rating:
-                        product.rating || 0,
-                    reviewCount:
-                        product.reviewCount ||
-                        0,
-                    identifiers:
-                        product.identifiers ||
-                        {},
-                    identity:
-                        productIdentity,
-                    metadata: {
-                        externalId:
-                            product.externalId,
-                        provider:
-                            product.provider,
-                        query:
-                            productQuery
-                    }
-                });
-        } else {
-            const currentQuery =
-                existingProduct.metadata
-                    ?.query;
-            if (
-                !existingProduct.identity?.fingerprint &&
-                productIdentity.fingerprint
-            ) {
-                existingProduct.identity =
-                    productIdentity;
+                            : []
+                }
+            });
 
-                await existingProduct.save();
-            }
-            if (
-                !currentQuery ||
-                currentQuery !==
-                productQuery
-            ) {
-                existingProduct.metadata = {
-                    ...(existingProduct.metadata?.toObject
-                        ? existingProduct.metadata.toObject()
-                        : existingProduct.metadata),
-                    externalId:
-                        product.externalId,
-                    provider:
-                        product.provider,
-                    query:
-                        productQuery
-                };
-
-                await existingProduct.save();
-            }
-        }
+        const existingProduct =
+            canonicalResult.product;
 
         const normalizedOffers =
             offers

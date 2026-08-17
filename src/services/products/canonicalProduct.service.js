@@ -313,12 +313,32 @@ const getOrCreateCanonicalProduct =
             };
         }
 
+        const baseSlug =
+            createSlug(
+                product.title
+            );
+
+        let slug =
+            baseSlug;
+
+        let counter = 1;
+
+        while (
+            await Product.exists({
+                slug
+            })
+        ) {
+            slug =
+                `${baseSlug}-${counter}`;
+
+            counter += 1;
+        }
+
         const created =
             await Product.create({
                 title:
                     product.title,
-                slug:
-                    product.slug,
+                slug,
                 brand:
                     product.brand ||
                     null,

@@ -1,3 +1,5 @@
+import { getMerchantIdentity } from "../merchants/merchantIdentity.service";
+
 const normalizeOffer = (
     offer,
     product
@@ -17,6 +19,13 @@ const normalizeOffer = (
     ) {
         return null;
     }
+    const merchantIdentity =
+        getMerchantIdentity({
+            merchant:
+                offer.merchant,
+            merchantUrl:
+                offer.merchantUrl
+        });
 
     const originalPrice =
         offer.originalPrice !==
@@ -39,6 +48,10 @@ const normalizeOffer = (
             offer.title ||
             product.title,
         merchant:
+            merchantIdentity.canonicalName,
+        merchantKey:
+            merchantIdentity.key,
+        merchantName:
             offer.merchant.trim(),
         merchantUrl:
             offer.merchantUrl ||
