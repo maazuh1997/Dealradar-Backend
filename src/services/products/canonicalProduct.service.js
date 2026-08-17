@@ -1,4 +1,5 @@
 import Product from "../../models/Product.js";
+import createSlug from "../../utils/createSlug.js";
 import {
     buildProductIdentity,
     shouldUpgradeIdentity
@@ -29,10 +30,26 @@ const findCanonicalProduct = async ({
     ) {
         const providerProduct =
             await Product.findOne({
-                "metadata.externalId":
-                    product.externalId,
-                "metadata.provider":
-                    product.provider
+                $or: [
+                    {
+                        "metadata.externalId":
+                            product.externalId,
+                        "metadata.provider":
+                            product.provider
+                    },
+                    {
+                        providerIds: {
+                            $elemMatch: {
+                                provider:
+                                    product.provider,
+                                externalId:
+                                    String(
+                                        product.externalId
+                                    )
+                            }
+                        }
+                    }
+                ]
             });
 
         if (providerProduct) {
@@ -242,18 +259,14 @@ const mergeProductIdentity = async ({
                 ? product.images
                 : [];
 
-        const images =
-            [
-                ...existingImages,
-                ...incomingProduct.images
-            ].filter(Boolean);
+        const images = [
+            ...existingImages,
+            ...incomingProduct.images
+        ].filter(Boolean);
 
-        const uniqueImages =
-            [
-                ...new Set(
-                    images
-                )
-            ];
+        const uniqueImages = [
+            ...new Set(images)
+        ];
 
         if (
             uniqueImages.length !==
@@ -264,6 +277,47 @@ const mergeProductIdentity = async ({
                     0,
                     10
                 );
+
+            changed = true;
+        }
+    }
+
+    if (
+        incomingProduct.externalId &&
+        incomingProduct.provider
+    ) {
+        const providerIds =
+            Array.isArray(
+                product.providerIds
+            )
+                ? product.providerIds
+                : [];
+
+        const exists =
+            providerIds.some(
+                (item) =>
+                    item.provider ===
+                    incomingProduct.provider &&
+                    String(
+                        item.externalId
+                    ) ===
+                    String(
+                        incomingProduct.externalId
+                    )
+            );
+
+        if (!exists) {
+            providerIds.push({
+                provider:
+                    incomingProduct.provider,
+                externalId:
+                    String(
+                        incomingProduct.externalId
+                    )
+            });
+
+            product.providerIds =
+                providerIds;
 
             changed = true;
         }
@@ -334,6 +388,21 @@ const getOrCreateCanonicalProduct =
             counter += 1;
         }
 
+        const providerIds =
+            product.externalId &&
+                product.provider
+                ? [
+                    {
+                        provider:
+                            product.provider,
+                        externalId:
+                            String(
+                                product.externalId
+                            )
+                    }
+                ]
+                : [];
+
         const created =
             await Product.create({
                 title:
@@ -365,6 +434,7 @@ const getOrCreateCanonicalProduct =
                     0,
                 identity:
                     result.identity,
+                providerIds,
                 metadata: {
                     externalId:
                         product.externalId ||

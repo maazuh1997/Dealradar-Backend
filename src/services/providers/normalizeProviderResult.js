@@ -1,4 +1,6 @@
-import { getMerchantIdentity } from "../merchants/merchantIdentity.service";
+import {
+    getMerchantIdentity
+} from "../merchants/merchantIdentity.service.js";
 
 const normalizeOffer = (
     offer,
@@ -9,7 +11,9 @@ const normalizeOffer = (
     }
 
     const price =
-        Number(offer.price);
+        Number(
+            offer.price
+        );
 
     if (
         !offer.merchant ||
@@ -19,6 +23,7 @@ const normalizeOffer = (
     ) {
         return null;
     }
+
     const merchantIdentity =
         getMerchantIdentity({
             merchant:
@@ -127,7 +132,9 @@ const normalizeProviderResult = (
     }
 
     const price =
-        Number(result.price);
+        Number(
+            result.price
+        );
 
     const originalPrice =
         result.originalPrice !==

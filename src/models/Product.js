@@ -88,6 +88,21 @@ const productSchema = new mongoose.Schema(
         default: "medium"
       }
     },
+    providerIds: {
+      type: [
+        {
+          provider: {
+            type: String,
+            required: true
+          },
+          externalId: {
+            type: String,
+            required: true
+          }
+        }
+      ],
+      default: []
+    },
     metadata: {
       type: mongoose.Schema.Types.Mixed,
       default: {}
@@ -103,10 +118,20 @@ productSchema.index({
   brand: "text",
   category: "text"
 });
+
 productSchema.index({
   "identity.fingerprint": 1
 });
 
-const Product = mongoose.model("Product", productSchema);
+productSchema.index({
+  "providerIds.provider": 1,
+  "providerIds.externalId": 1
+});
+
+const Product =
+  mongoose.model(
+    "Product",
+    productSchema
+  );
 
 export default Product;
