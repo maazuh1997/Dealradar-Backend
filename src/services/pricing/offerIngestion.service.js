@@ -5,6 +5,9 @@ import {
     getOrCreateCanonicalProduct
 } from "../products/canonicalProduct.service.js";
 import {
+    getOrCreateCanonicalVariant
+} from "../products/canonicalVariant.service.js";
+import {
     getMerchantIdentity
 } from "../merchants/merchantIdentity.service.js";
 
@@ -75,10 +78,44 @@ const ingestOffer = async (
     const product =
         canonicalResult.product;
 
+    const variantResult =
+        await getOrCreateCanonicalVariant({
+            productId:
+                product._id,
+            title:
+                data.title,
+            attributes:
+                data.attributes ||
+                data.variant ||
+                data.options ||
+                {},
+            identifiers:
+                data.identifiers ||
+                {},
+            specifications:
+                data.specifications ||
+                {},
+            images:
+                data.image
+                    ? [data.image]
+                    : [],
+            provider:
+                data.provider,
+            externalId:
+                data.externalId ||
+                data.productExternalId ||
+                null
+        });
+
+    const variant =
+        variantResult.variant;
+
     let offer =
         await Offer.findOne({
             product:
                 product._id,
+            variant:
+                variant._id,
             merchantKey:
                 merchantIdentity.key,
             provider:
@@ -93,6 +130,8 @@ const ingestOffer = async (
             await Offer.create({
                 product:
                     product._id,
+                variant:
+                    variant._id,
                 merchant:
                     merchantIdentity.canonicalName,
                 merchantKey:
@@ -185,6 +224,7 @@ const ingestOffer = async (
 
     return {
         product,
+        variant,
         offer
     };
 };

@@ -3,9 +3,16 @@ import mongoose from "mongoose";
 const offerSchema = new mongoose.Schema(
   {
     product: {
-      type: mongoose.Schema.Types.ObjectId,
+      type:
+        mongoose.Schema.Types.ObjectId,
       ref: "Product",
       required: true,
+      index: true
+    },
+    variant: {
+      type:
+        mongoose.Schema.Types.ObjectId,
+      ref: "ProductVariant",
       index: true
     },
     merchantKey: {
@@ -46,7 +53,12 @@ const offerSchema = new mongoose.Schema(
     },
     availability: {
       type: String,
-      enum: ["in_stock", "out_of_stock", "preorder", "unknown"],
+      enum: [
+        "in_stock",
+        "out_of_stock",
+        "preorder",
+        "unknown"
+      ],
       default: "unknown"
     },
     shippingCost: {
@@ -75,6 +87,15 @@ offerSchema.index({
   provider: 1
 });
 
-const Offer = mongoose.model("Offer", offerSchema);
+offerSchema.index({
+  variant: 1,
+  merchantKey: 1,
+  provider: 1
+});
+
+const Offer = mongoose.model(
+  "Offer",
+  offerSchema
+);
 
 export default Offer;
