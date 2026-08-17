@@ -7,6 +7,7 @@ import PriceAlert from "../models/PriceAlert.js";
 import Watchlist from "../models/Watchlist.js";
 import Offer from "../models/Offer.js";
 import PriceHistory from "../models/PriceHistory.js";
+import Notification from "../models/Notification.js";
 
 const createProduct = asyncHandler(async (req, res) => {
     const {

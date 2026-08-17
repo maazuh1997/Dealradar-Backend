@@ -5,7 +5,8 @@ import Product from "../models/Product.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import {
     calculateDealScore,
-    calculatePriceStats
+    calculatePriceStats,
+    calculatePriceIntelligence
 } from "../services/pricing/dealScore.service.js";
 
 const findProductByIdentifier = async (
@@ -193,6 +194,22 @@ const getProductPriceStats = asyncHandler(async (req, res) => {
     const bestOffer =
         offers[0];
 
+    const intelligence =
+        calculatePriceIntelligence({
+            currentPrice:
+                currentLowestPrice,
+            lowestPrice:
+                stats.lowestPrice,
+            highestPrice:
+                stats.highestPrice,
+            averagePrice:
+                stats.averagePrice ||
+                currentAveragePrice,
+            history,
+            merchantCount:
+                offers.length
+        });
+
     let dealScore = {
         score: 0,
         label: "Unknown"
@@ -233,7 +250,8 @@ const getProductPriceStats = asyncHandler(async (req, res) => {
             bestOffer:
                 bestOffer ||
                 null,
-            dealScore
+            dealScore,
+            intelligence
         }
     });
 });
