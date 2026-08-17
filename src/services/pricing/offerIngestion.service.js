@@ -102,8 +102,8 @@ const ingestOffer = async (
             provider:
                 data.provider,
             externalId:
-                data.externalId ||
                 data.productExternalId ||
+                data.externalId ||
                 null
         });
 
@@ -121,6 +121,25 @@ const ingestOffer = async (
             provider:
                 data.provider
         });
+
+    if (!offer) {
+        offer =
+            await Offer.findOne({
+                product:
+                    product._id,
+                variant:
+                    null,
+                merchantKey:
+                    merchantIdentity.key,
+                provider:
+                    data.provider
+            });
+
+        if (offer) {
+            offer.variant =
+                variant._id;
+        }
+    }
 
     const previousPrice =
         offer?.price;
