@@ -47,6 +47,47 @@ const productSchema = new mongoose.Schema(
       type: Number,
       default: 0
     },
+    identity: {
+      fingerprint: {
+        type: String,
+        index: true
+      },
+      normalizedTitle: {
+        type: String,
+        default: ""
+      },
+      normalizedBrand: {
+        type: String,
+        default: ""
+      },
+      normalizedCategory: {
+        type: String,
+        default: ""
+      },
+      model: {
+        type: String,
+        default: ""
+      },
+      identityType: {
+        type: String,
+        enum: [
+          "identifier",
+          "brand_model",
+          "title"
+        ],
+        default: "title"
+      },
+      confidence: {
+        type: String,
+        enum: [
+          "very_high",
+          "high",
+          "medium",
+          "low"
+        ],
+        default: "medium"
+      }
+    },
     metadata: {
       type: mongoose.Schema.Types.Mixed,
       default: {}
@@ -61,6 +102,9 @@ productSchema.index({
   title: "text",
   brand: "text",
   category: "text"
+});
+productSchema.index({
+  "identity.fingerprint": 1
 });
 
 const Product = mongoose.model("Product", productSchema);

@@ -8,6 +8,7 @@ import {
 } from "../services/providers/normalizeProviderResult.js";
 import createSlug from "../utils/createSlug.js";
 import processPriceAlert from "../services/pricing/priceAlert.service.js";
+import { buildProductIdentity } from "../services/products/productIdentity.service.js";
 
 const createTrackedProduct = asyncHandler(
     async (req, res) => {
@@ -29,6 +30,22 @@ const createTrackedProduct = asyncHandler(
             query?.trim() ||
             product.title.trim();
 
+        const productIdentity =
+            buildProductIdentity({
+                title:
+                    product.title,
+                brand:
+                    product.brand,
+                category:
+                    product.category,
+                identifiers:
+                    product.identifiers ||
+                    {},
+                specifications:
+                    product.specifications ||
+                    {}
+            });
+
         let existingProduct = null;
 
         if (
@@ -41,6 +58,17 @@ const createTrackedProduct = asyncHandler(
                         product.externalId,
                     "metadata.provider":
                         product.provider
+                });
+        }
+
+        if (
+            !existingProduct &&
+            productIdentity.fingerprint
+        ) {
+            existingProduct =
+                await Product.findOne({
+                    "identity.fingerprint":
+                        productIdentity.fingerprint
                 });
         }
 
@@ -86,6 +114,8 @@ const createTrackedProduct = asyncHandler(
                     identifiers:
                         product.identifiers ||
                         {},
+                    identity:
+                        productIdentity,
                     metadata: {
                         externalId:
                             product.externalId,
@@ -99,7 +129,15 @@ const createTrackedProduct = asyncHandler(
             const currentQuery =
                 existingProduct.metadata
                     ?.query;
+            if (
+                !existingProduct.identity?.fingerprint &&
+                productIdentity.fingerprint
+            ) {
+                existingProduct.identity =
+                    productIdentity;
 
+                await existingProduct.save();
+            }
             if (
                 !currentQuery ||
                 currentQuery !==
