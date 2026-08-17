@@ -110,30 +110,17 @@ const addProviderId = ({
         providerIds.find(
             (item) =>
                 item.provider ===
-                provider
+                provider &&
+                String(
+                    item.externalId
+                ) ===
+                String(
+                    externalId
+                )
         );
 
     if (existing) {
-        if (
-            String(
-                existing.externalId
-            ) ===
-            String(
-                externalId
-            )
-        ) {
-            return false;
-        }
-
-        existing.externalId =
-            String(
-                externalId
-            );
-
-        variant.providerIds =
-            providerIds;
-
-        return true;
+        return false;
     }
 
     providerIds.push({
@@ -149,7 +136,6 @@ const addProviderId = ({
 
     return true;
 };
-
 const createVariant = async ({
     productId,
     title,
