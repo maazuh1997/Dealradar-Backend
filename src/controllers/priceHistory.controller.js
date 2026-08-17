@@ -229,7 +229,9 @@ const getProductPriceStats =
 
             const currentPrices =
                 offers.map(
-                    (offer) =>
+                    (
+                        offer
+                    ) =>
                         offer.price
                 );
 

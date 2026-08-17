@@ -18,7 +18,9 @@ const normalizeOffer = (
     if (
         !offer.merchant ||
         !offer.url ||
-        !Number.isFinite(price) ||
+        !Number.isFinite(
+            price
+        ) ||
         price < 0
     ) {
         return null;
@@ -151,7 +153,9 @@ const normalizeProviderResult = (
     }
 
     if (
-        !Number.isFinite(price) ||
+        !Number.isFinite(
+            price
+        ) ||
         price < 0
     ) {
         return null;
@@ -218,7 +222,9 @@ const normalizeProviderResult = (
         )
             ? result.offers
                 .map(
-                    (offer) =>
+                    (
+                        offer
+                    ) =>
                         normalizeOffer(
                             offer,
                             product

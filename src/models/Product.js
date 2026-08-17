@@ -91,6 +91,7 @@ const productSchema = new mongoose.Schema(
     providerIds: {
       type: [
         {
+          _id: false,
           provider: {
             type: String,
             required: true

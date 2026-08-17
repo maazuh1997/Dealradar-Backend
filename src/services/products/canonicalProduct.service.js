@@ -33,7 +33,9 @@ const findCanonicalProduct = async ({
                 $or: [
                     {
                         "metadata.externalId":
-                            product.externalId,
+                            String(
+                                product.externalId
+                            ),
                         "metadata.provider":
                             product.provider
                     },
@@ -265,7 +267,9 @@ const mergeProductIdentity = async ({
         ].filter(Boolean);
 
         const uniqueImages = [
-            ...new Set(images)
+            ...new Set(
+                images
+            )
         ];
 
         if (
