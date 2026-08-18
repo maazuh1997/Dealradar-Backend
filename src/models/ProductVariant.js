@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+
 const productVariantSchema =
     new mongoose.Schema(
         {
@@ -48,6 +49,26 @@ const productVariantSchema =
                     mongoose.Schema.Types.Mixed,
                 default: {}
             },
+            images: {
+                type: [String],
+                default: []
+            },
+            identity: {
+                confidence: {
+                    type: String,
+                    enum: [
+                        "very_high",
+                        "high",
+                        "medium",
+                        "low"
+                    ],
+                    default: "medium"
+                },
+                sources: {
+                    type: [String],
+                    default: []
+                }
+            },
             providerIds: {
                 type: [
                     {
@@ -63,18 +84,6 @@ const productVariantSchema =
                     }
                 ],
                 default: []
-            },
-            images: {
-                type: [String],
-                default: []
-            },
-            status: {
-                type: String,
-                enum: [
-                    "active",
-                    "inactive"
-                ],
-                default: "active"
             }
         },
         {
@@ -82,37 +91,30 @@ const productVariantSchema =
         }
     );
 
-productVariantSchema.index(
-    {
-        product: 1,
-        variantKey: 1
-    },
-    {
-        unique: true
-    }
-);
+
+productVariantSchema.index({
+    product: 1,
+    variantKey: 1
+});
+
+
+productVariantSchema.index({
+    product: 1,
+    fingerprint: 1
+});
+
 
 productVariantSchema.index({
     "providerIds.provider": 1,
     "providerIds.externalId": 1
 });
 
-productVariantSchema.index({
-    "identifiers.gtin": 1
-});
-
-productVariantSchema.index({
-    "identifiers.ean": 1
-});
-
-productVariantSchema.index({
-    "identifiers.upc": 1
-});
 
 const ProductVariant =
     mongoose.model(
         "ProductVariant",
         productVariantSchema
     );
+
 
 export default ProductVariant;

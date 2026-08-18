@@ -8,6 +8,7 @@ import Watchlist from "../models/Watchlist.js";
 import Offer from "../models/Offer.js";
 import PriceHistory from "../models/PriceHistory.js";
 import Notification from "../models/Notification.js";
+import ProductVariant from "../models/ProductVariant.js";
 
 const createProduct = asyncHandler(async (req, res) => {
     const {
@@ -367,6 +368,232 @@ const getProductBySlug = asyncHandler(async (req, res) => {
     });
 });
 
+const findProductByIdentifier = async (
+    identifier
+) => {
+    let product = null;
+
+    if (
+        mongoose.Types.ObjectId.isValid(
+            identifier
+        )
+    ) {
+        product =
+            await Product.findById(
+                identifier
+            );
+    }
+
+    if (!product) {
+        product =
+            await Product.findOne({
+                slug:
+                    identifier
+            });
+    }
+
+    if (!product) {
+        product =
+            await Product.findOne({
+                "metadata.externalId":
+                    identifier,
+                "metadata.provider":
+                    "pricesapi"
+            });
+    }
+
+    if (!product) {
+        product =
+            await Product.findOne({
+                providerIds: {
+                    $elemMatch: {
+                        externalId:
+                            String(
+                                identifier
+                            )
+                    }
+                }
+            });
+    }
+
+    return product;
+};
+
+const getProductVariants =
+    asyncHandler(
+        async (
+            req,
+            res
+        ) => {
+            const {
+                productId
+            } = req.params;
+
+            const product =
+                await findProductByIdentifier(
+                    productId
+                );
+
+            if (!product) {
+                return res.status(
+                    404
+                ).json({
+                    success:
+                        false,
+                    message:
+                        "Product not found"
+                });
+            }
+
+            const variants =
+                await ProductVariant.find({
+                    product:
+                        product._id
+                })
+                    .sort({
+                        createdAt:
+                            1
+                    })
+                    .lean();
+
+            const variantIds =
+                variants.map(
+                    (
+                        variant
+                    ) =>
+                        variant._id
+                );
+
+            const offers =
+                variantIds.length
+                    ? await Offer.find({
+                        product:
+                            product._id,
+                        variant: {
+                            $in:
+                                variantIds
+                        }
+                    })
+                        .sort({
+                            price:
+                                1
+                        })
+                        .lean()
+                    : [];
+
+            const offersByVariant =
+                new Map();
+
+            for (
+                const offer of
+                offers
+            ) {
+                const key =
+                    String(
+                        offer.variant
+                    );
+
+                if (
+                    !offersByVariant.has(
+                        key
+                    )
+                ) {
+                    offersByVariant.set(
+                        key,
+                        []
+                    );
+                }
+
+                offersByVariant
+                    .get(key)
+                    .push(
+                        offer
+                    );
+            }
+
+            const data =
+                variants.map(
+                    (
+                        variant
+                    ) => {
+                        const variantOffers =
+                            offersByVariant.get(
+                                String(
+                                    variant._id
+                                )
+                            ) || [];
+
+                        const availableOffers =
+                            variantOffers.filter(
+                                (
+                                    offer
+                                ) =>
+                                    offer.availability !==
+                                    "out_of_stock"
+                            );
+
+                        const prices =
+                            availableOffers.map(
+                                (
+                                    offer
+                                ) =>
+                                    Number(
+                                        offer.price
+                                    )
+                            )
+                                .filter(
+                                    (
+                                        price
+                                    ) =>
+                                        Number.isFinite(
+                                            price
+                                        )
+                                );
+
+                        const lowestPrice =
+                            prices.length
+                                ? Math.min(
+                                    ...prices
+                                )
+                                : 0;
+
+                        return {
+                            ...variant,
+                            offers:
+                                variantOffers,
+                            offerCount:
+                                variantOffers.length,
+                            merchantCount:
+                                new Set(
+                                    variantOffers.map(
+                                        (
+                                            offer
+                                        ) =>
+                                            offer.merchantKey ||
+                                            offer.merchant
+                                    )
+                                ).size,
+                            lowestPrice
+                        };
+                    }
+                );
+
+            res.status(
+                200
+            ).json({
+                success:
+                    true,
+                data: {
+                    product,
+                    variants:
+                        data,
+                    count:
+                        data.length
+                }
+            });
+        }
+    );
+
 const updateProduct = asyncHandler(async (req, res) => {
     const product = await Product.findById(req.params.id);
 
@@ -486,12 +713,12 @@ const deleteProduct = asyncHandler(async (req, res) => {
             "Product deleted successfully"
     });
 });
-
 export {
     createProduct,
     getProducts,
     searchProducts,
     getProductBySlug,
+    getProductVariants,
     updateProduct,
     deleteProduct
 };

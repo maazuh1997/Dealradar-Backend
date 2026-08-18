@@ -1,6 +1,9 @@
 import {
     getMerchantIdentity
 } from "../merchants/merchantIdentity.service.js";
+import {
+    extractVariantAttributes
+} from "../products/productVariantExtractor.service.js";
 
 const normalizeOffer = (
     offer,
@@ -46,6 +49,23 @@ const normalizeOffer = (
         Number(
             offer.shippingCost
         );
+
+    const variantExtraction =
+        extractVariantAttributes({
+            title:
+                offer.title ||
+                product.title,
+            attributes:
+                offer.attributes ||
+                {},
+            options:
+                offer.options ||
+                {},
+            specifications:
+                offer.specifications ||
+                product.specifications ||
+                {}
+        });
 
     return {
         externalId:
@@ -116,6 +136,12 @@ const normalizeOffer = (
             offer.category ||
             product.category ||
             null,
+        attributes:
+            variantExtraction.attributes,
+        variantConfidence:
+            variantExtraction.confidence,
+        variantSources:
+            variantExtraction.sources,
         provider:
             offer.provider ||
             product.provider,
@@ -160,6 +186,21 @@ const normalizeProviderResult = (
     ) {
         return null;
     }
+
+    const variantExtraction =
+        extractVariantAttributes({
+            title:
+                result.title,
+            attributes:
+                result.attributes ||
+                {},
+            options:
+                result.options ||
+                {},
+            specifications:
+                result.specifications ||
+                {}
+        });
 
     const product = {
         externalId:
@@ -209,6 +250,18 @@ const normalizeProviderResult = (
         category:
             result.category?.trim() ||
             null,
+        attributes:
+            variantExtraction.attributes,
+        variantConfidence:
+            variantExtraction.confidence,
+        variantSources:
+            variantExtraction.sources,
+        identifiers:
+            result.identifiers ||
+            {},
+        specifications:
+            result.specifications ||
+            {},
         provider:
             result.provider,
         productExternalId:

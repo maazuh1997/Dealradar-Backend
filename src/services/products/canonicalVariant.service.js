@@ -4,6 +4,21 @@ import {
     buildVariantIdentity
 } from "./productVariantIdentity.service.js";
 
+const identifierPriority = [
+    "gtin",
+    "ean",
+    "upc",
+    "sku",
+    "mpn"
+];
+
+const confidenceRank = {
+    low: 1,
+    medium: 2,
+    high: 3,
+    very_high: 4
+};
+
 const findVariantByProviderId = async ({
     provider,
     externalId
@@ -28,46 +43,77 @@ const findVariantByProviderId = async ({
     });
 };
 
+const hasConflictingIdentifiers = ({
+    variant,
+    identifiers
+}) => {
+    for (
+        const key of identifierPriority
+    ) {
+        const incomingValue =
+            identifiers[key];
+
+        const existingValue =
+            variant.identifiers?.[key];
+
+        if (
+            incomingValue &&
+            existingValue &&
+            String(
+                incomingValue
+            ) !==
+            String(
+                existingValue
+            )
+        ) {
+            return true;
+        }
+    }
+
+    return false;
+};
+
 const findVariantByIdentifier = async ({
     productId,
     identifiers = {}
 }) => {
-    const queries = [];
-
     for (
-        const key of [
-            "gtin",
-            "ean",
-            "upc",
-            "sku",
-            "mpn"
-        ]
+        const key of identifierPriority
     ) {
         const value =
             identifiers[key];
 
-        if (value) {
-            queries.push({
+        if (!value) {
+            continue;
+        }
+
+        const variant =
+            await ProductVariant.findOne({
+                product:
+                    productId,
                 [`identifiers.${key}`]:
                     String(
                         value
                     )
             });
+
+        if (!variant) {
+            continue;
         }
+
+        if (
+            hasConflictingIdentifiers({
+                variant,
+                identifiers
+            })
+        ) {
+            continue;
+        }
+
+        return variant;
     }
 
-    if (
-        !queries.length
-    ) {
-        return null;
-    }
-
-    return ProductVariant.findOne({
-        product:
-            productId,
-        $or:
-            queries
-    });
+    return null;
 };
 
 const findVariantByFingerprint = async ({
@@ -136,6 +182,66 @@ const addProviderId = ({
 
     return true;
 };
+
+const updateIdentityMetadata = ({
+    variant,
+    confidence,
+    sources
+}) => {
+    if (
+        !confidence
+    ) {
+        return false;
+    }
+
+    const currentConfidence =
+        variant.identity
+            ?.confidence ||
+        "medium";
+
+    const currentRank =
+        confidenceRank[
+        currentConfidence
+        ] || 2;
+
+    const incomingRank =
+        confidenceRank[
+        confidence
+        ] || 1;
+
+    let changed = false;
+
+    if (
+        incomingRank >
+        currentRank
+    ) {
+        variant.identity = {
+            ...(variant.identity || {}),
+            confidence,
+            sources:
+                sources || []
+        };
+
+        changed = true;
+    } else if (
+        !variant.identity
+            ?.sources
+            ?.length &&
+        sources?.length
+    ) {
+        variant.identity = {
+            ...(variant.identity || {}),
+            confidence:
+                currentConfidence,
+            sources
+        };
+
+        changed = true;
+    }
+
+    return changed;
+};
+
 const createVariant = async ({
     productId,
     title,
@@ -144,7 +250,9 @@ const createVariant = async ({
     specifications,
     images,
     provider,
-    externalId
+    externalId,
+    confidence,
+    sources
 }) => {
     const identity =
         buildVariantIdentity({
@@ -194,6 +302,13 @@ const createVariant = async ({
             identity.specifications,
         images:
             images || [],
+        identity: {
+            confidence:
+                confidence ||
+                "medium",
+            sources:
+                sources || []
+        },
         providerIds:
             provider &&
                 externalId
@@ -219,7 +334,9 @@ const getOrCreateCanonicalVariant =
         specifications = {},
         images = [],
         provider,
-        externalId
+        externalId,
+        confidence = "medium",
+        sources = []
     }) => {
         if (!productId) {
             throw new Error(
@@ -291,7 +408,9 @@ const getOrCreateCanonicalVariant =
                         identity.specifications,
                     images,
                     provider,
-                    externalId
+                    externalId,
+                    confidence,
+                    sources
                 });
 
             return {
@@ -311,8 +430,17 @@ const getOrCreateCanonicalVariant =
                 externalId
             })
         ) {
-            changed =
-                true;
+            changed = true;
+        }
+
+        if (
+            updateIdentityMetadata({
+                variant,
+                confidence,
+                sources
+            })
+        ) {
+            changed = true;
         }
 
         if (
@@ -322,8 +450,7 @@ const getOrCreateCanonicalVariant =
             variant.images =
                 images;
 
-            changed =
-                true;
+            changed = true;
         }
 
         if (
@@ -334,8 +461,7 @@ const getOrCreateCanonicalVariant =
             variant.title =
                 title.trim();
 
-            changed =
-                true;
+            changed = true;
         }
 
         if (changed) {

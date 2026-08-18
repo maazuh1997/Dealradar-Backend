@@ -104,7 +104,25 @@ const ingestOffer = async (
             externalId:
                 data.productExternalId ||
                 data.externalId ||
-                null
+                null,
+            confidence:
+                data.variantConfidence ||
+                "medium",
+            sources:
+                data.variantSources
+                    ? [
+                        ...(
+                            data.variantSources
+                                .explicit ||
+                            []
+                        ),
+                        ...(
+                            data.variantSources
+                                .title ||
+                            []
+                        )
+                    ]
+                    : []
         });
 
     const variant =
